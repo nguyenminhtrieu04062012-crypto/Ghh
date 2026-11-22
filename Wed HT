@@ -1,0 +1,138 @@
+--[[
+=====================================================================
+ SCRIPT HOÀN CHỈNH - LocalScript
+ Đặt tại: StarterPlayer > StarterPlayerScripts
+ Chức năng:
+   1) Tên trên đầu nhân vật (BillboardGui) - hiển thị chuẩn, không lõi
+   2) Tối ưu hiệu năng cơ bản: tắt bóng thừa, giảm hạt hiệu ứng
+ Chỉ dùng cho GAME TỰ LÀM trong Roblox Studio.
+=====================================================================
+]]
+
+local Players  = game:GetService("Players")
+local Lighting = game:GetService("Lighting")
+local Workspace = game:GetService("Workspace")
+
+-- ==================== CẤU HÌNH CHÍNH (chỉnh tại đây) ====================
+local Config = {
+
+	-- Phần 1: Tên trên đầu nhân vật
+	Nametag = {
+		Enabled        = true,
+		UseDisplayName = true,            -- true: tên hiển thị; false: tên tài khoản
+		Prefix         = "",              -- ví dụ: "[BVD] " để gắn nhãn trước tên
+		Suffix         = "",
+		MaxDistance    = 60,               -- xa hơn số này thì ẩn tên, giảm lag
+		OffsetY        = 2,                -- độ cao so với đầu
+		Width          = 3,
+		Height         = 0.6,
+		AlwaysOnTop    = false,            -- true: đè xuyên tường; false: tự nhiên
+		TextColor      = Color3.new(1, 1, 1),
+		Background     = Color3.fromRGB(30, 30, 30),
+		BgTransparency = 0.35,
+	},
+
+	-- Phần 2: Tối ưu hiệu năng
+	Performance = {
+		Enabled             = true,
+		DisableGlobalShadows = true,       -- tắt bóng toàn cục, nhẹ máy
+		ParticleRateScale   = 0.5,         -- giảm số hạt hiệu ứng còn 50%
+		MaxParticleRate     = 60,
+	}
+}
+-- =======================================================================
+
+
+-- ==================== PHẦN 1: HỆ THỐNG TÊN TRÊN ĐẦU ====================
+
+local function buildNametag(character, player)
+	local head = character:WaitForChild("Head", 10)
+	if not head then return end
+
+	-- Xóa bảng tên cũ (tránh trùng khi respawn)
+	local old = head:FindFirstChild("NameTag")
+	if old then old:Destroy() end
+
+	-- 1) Nền bảng tên
+	local bill = Instance.new("BillboardGui")
+	bill.Name            = "NameTag"
+	bill.Adornee         = head                          -- gắn chặt vào đầu, không lệch
+	bill.Size            = UDim2.fromScale(Config.Nametag.Width, Config.Nametag.Height)
+	bill.StudsOffset     = Vector3.new(0, Config.Nametag.OffsetY, 0)
+	bill.MaxDistance     = Config.Nametag.MaxDistance
+	bill.AlwaysOnTop     = Config.Nametag.AlwaysOnTop
+	bill.ResetOnSpawn    = false
+
+	local bg = Instance.new("Frame")
+	bg.Size                   = UDim2.fromScale(1, 1)
+	bg.BackgroundColor3       = Config.Nametag.Background
+	bg.BackgroundTransparency = Config.Nametag.BgTransparency
+	bg.SizeConstraint         = Enum.SizeConstraint.RelativeXX
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0.3, 0)
+	corner.Parent = bg
+
+	-- 2) Dòng chữ tên
+	local label = Instance.new("TextLabel")
+	label.Size               = UDim2.fromScale(0.92, 0.8)
+	label.Position           = UDim2.fromScale(0.04, 0.1)
+	label.BackgroundTransparency = 1
+	label.Font               = Enum.Font.GothamBold
+	label.TextScaled         = true
+	label.TextColor3         = Config.Nametag.TextColor
+	label.TextStrokeTransparency = 0.5                  -- viền chữ, không chìm vào nền tối
+
+	local baseName = Config.Nametag.UseDisplayName and player.DisplayName or player.Name
+	label.Text = Config.Nametag.Prefix .. baseName .. Config.Nametag.Suffix
+
+	label.Parent = bg
+	bg.Parent    = bill
+	bill.Parent  = head
+end
+
+local function hookPlayer(player)
+	local function onCharacter(character)
+		if Config.Nametag.Enabled then
+			buildNametag(character, player)
+		end
+	end
+
+	player.CharacterAdded:Connect(onCharacter)
+	if player.Character then
+		onCharacter(player.Character)
+	end
+end
+
+Players.PlayerAdded:Connect(hookPlayer)
+for _, existingPlayer in ipairs(Players:GetPlayers()) do
+	hookPlayer(existingPlayer)
+end
+
+
+-- ==================== PHẦN 2: TỐI ƯU HIỆU NĂNG ====================
+
+local function tuneParticles()
+	local scale   = Config.Performance.ParticleRateScale
+	local maxRate = Config.Performance.MaxParticleRate
+
+	for _, obj in ipairs(Workspace:GetDescendants()) do
+		if obj:IsA("ParticleEmitter") then
+			obj.Rate = math.clamp(math.floor(obj.Rate * scale), 0, maxRate)
+		end
+	end
+
+	-- Áp dụng cho hiệu ứng sinh ra thêm sau này
+	Workspace.DescendantAdded:Connect(function(obj)
+		if obj:IsA("ParticleEmitter") then
+			obj.Rate = math.clamp(math.floor(obj.Rate * scale), 0, maxRate)
+		end
+	end)
+end
+
+if Config.Performance.Enabled then
+	if Config.Performance.DisableGlobalShadows then
+		Lighting.GlobalShadows = false
+	end
+	tuneParticles()
+end
